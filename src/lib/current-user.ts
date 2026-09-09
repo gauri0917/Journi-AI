@@ -5,7 +5,8 @@ export async function currentUserName(): Promise<string> {
     const store = await cookies();
     const guestName = store.get("journi_user")?.value;
     if (guestName && guestName.trim()) return decodeURIComponent(guestName).trim();
-  } catch {}
+  } catch {
+  }
   return process.env.CURRENT_USER_NAME?.trim() || "Demo Owner";
 }
 
@@ -14,6 +15,7 @@ export async function currentUserRole(): Promise<string | null> {
     const store = await cookies();
     const guestRole = store.get("journi_role")?.value;
     if (guestRole && guestRole.trim()) return decodeURIComponent(guestRole).trim();
-  } catch {}
+  } catch {
+  }
   return null;
 }

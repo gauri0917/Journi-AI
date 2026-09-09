@@ -15,7 +15,7 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
   });
   if (!journey) notFound();
 
-  const viewer = { name: currentUserName(), role: currentUserRole() };
+  const viewer = { name: await currentUserName(), role: await currentUserRole() };
 
   const pending = journey.reviews.filter((r: (typeof journey.reviews)[number]) => r.status === "pending").length;
 

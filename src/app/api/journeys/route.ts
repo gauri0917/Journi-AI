@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
         description: typeof body.description === "string" ? body.description.trim() : null,
         productType: body.productType.trim(),
         status: "draft",
-        createdBy: currentUserName(),
+        createdBy: await currentUserName(),
       },
     });
 

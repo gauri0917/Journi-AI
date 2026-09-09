@@ -20,7 +20,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     // Restricted to the journey's owner — this action is now tied to who's
     // logged in, not anonymous. No separate "admin" or "publisher" role
     // exists in this prototype, so ownership is the only available line.
-    if (journey.createdBy !== currentUserName()) {
+    if (journey.createdBy !== await currentUserName()) {
       return NextResponse.json(
         { error: `only ${journey.createdBy} (who created this journey) can publish it` },
         { status: 403 }

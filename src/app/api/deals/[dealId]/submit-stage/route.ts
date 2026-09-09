@@ -1,13 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { currentUserName } from "@/lib/current-user";
 import { namesMatch, stageRequiresApproval, missingRequiredFields, type StageFieldValues } from "@/lib/deal-run";
 import type { SchemaSnapshot } from "@/lib/types";
 
-// Submits field values for whichever stage is currently active on a deal.
-// Gated on namesMatch(currentUserName(), stage.owner_role) — "profile name,
-// not role": only the guest whose logged-in name matches this specific
-// stage's owner_role can fill it in.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ dealId: string }> }) {
   const { dealId } = await params;
   const body = await req.json().catch(() => null);
@@ -25,7 +22,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ dea
   const stage = stages[stageIndex];
   if (!stage) return NextResponse.json({ error: "current stage not found in schema" }, { status: 500 });
 
-  const actor = currentUserName();
+  const actor = await currentUserName();
   if (!namesMatch(actor, stage.owner_role)) {
     return NextResponse.json(
       { error: `only "${stage.owner_role}" can fill in this stage — you're logged in as "${actor}"` },
@@ -46,10 +43,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ dea
   const updatedValues = { ...existingValues, [stage.id]: values };
   const needsApproval = stageRequiresApproval(stage, values);
 
-  // If approval isn't triggered, advance immediately — otherwise leave
-  // currentStageId pointing at this same stage; the UI derives "awaiting
-  // approval" from fieldValues[stage.id] existing but stageApprovals[stage.id]
-  // not yet existing, rather than a separate status enum value.
   let nextStageId: string | null = deal.currentStageId;
   let nextStatus: "in_progress" | "completed" = "in_progress";
   if (!needsApproval) {
@@ -61,9 +54,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ dea
   const updated = await prisma.deal.update({
     where: { id: deal.id },
     data: {
-      // @ts-ignore: Bypass for Vercel
-      // @ts-ignore: Bypassing strict Prisma JSON type for deployment
-      fieldValues: updatedValues,
+      fieldValues: updatedValues as Prisma.InputJsonValue,
       currentStageId: nextStageId,
       status: nextStatus,
     },

@@ -21,7 +21,7 @@ export default async function JourneyDetailPage({ params }: { params: Promise<{ 
   });
   if (!journey) notFound();
 
-  const isOwner = journey.createdBy === currentUserName();
+  const isOwner = journey.createdBy === await currentUserName();
   const pending = journey.reviews.filter((r: (typeof journey.reviews)[number]) => r.status === "pending");
   const canEdit = journey.status === "draft" || journey.status === "in_review";
   const canPreview = !!journey.currentVersionId;

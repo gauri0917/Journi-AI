@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { currentUserName } from "@/lib/current-user";
 import { namesMatch, stageRequiresApproval, type StageFieldValues } from "@/lib/deal-run";
 import type { SchemaSnapshot } from "@/lib/types";
 
-// Approves the currently-active stage on a deal. Gated on
-// namesMatch(currentUserName(), stage.approver_role) — same "profile name,
-// not role" principle as submit-stage, applied to the approval side.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ dealId: string }> }) {
   const { dealId } = await params;
   const body = await req.json().catch(() => null);
@@ -38,7 +36,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ dea
     return NextResponse.json({ error: "this stage was already approved" }, { status: 409 });
   }
 
-  const actor = currentUserName();
+  const actor = await currentUserName();
   if (!namesMatch(actor, stage.approver_role)) {
     return NextResponse.json(
       { error: `only "${stage.approver_role}" can approve this stage — you're logged in as "${actor}"` },
@@ -58,9 +56,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ dea
   const updated = await prisma.deal.update({
     where: { id: deal.id },
     data: {
-      // @ts-ignore: Bypass for Vercel
-      // @ts-ignore: Bypassing strict Prisma JSON type for deployment
-      stageApprovals: updatedApprovals,
+      stageApprovals: updatedApprovals as Prisma.InputJsonValue,
       currentStageId: nextStageId,
       status: nextStatus,
     },

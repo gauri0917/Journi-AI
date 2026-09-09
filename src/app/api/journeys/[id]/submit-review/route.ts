@@ -46,7 +46,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     orderBy: { versionNumber: "desc" },
   });
   const nextVersionNumber = (lastVersion?.versionNumber ?? 0) + 1;
-  const actor = currentUserName();
+  const actor = await currentUserName();
 
   const [version] = await prisma.$transaction([
     prisma.journeyVersion.create({

@@ -38,7 +38,7 @@ export default async function DealDetailPage({ params }: { params: Promise<{ dea
           stageApprovals: deal.stageApprovals as Record<string, { approvedBy: string; approvedAt: string; comment?: string }>,
         }}
         schema={schema}
-        actorName={currentUserName()}
+        actorName={await currentUserName()}
       />
     </div>
   );

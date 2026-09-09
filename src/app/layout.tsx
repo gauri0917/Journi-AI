@@ -9,10 +9,8 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  // Reading cookies() here (in the root layout) makes every page dynamic —
-  // acceptable here since nearly every page already queries Prisma directly
-  // and was never a static-generation candidate anyway.
-  const guestName = await (await cookies()).get("journi_user")?.value;
+  const cookieStore = await cookies();
+  const guestName = cookieStore.get("journi_user")?.value;
   const decodedName = guestName ? decodeURIComponent(guestName) : null;
 
   return (

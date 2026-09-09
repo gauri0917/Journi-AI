@@ -10,8 +10,8 @@ export default async function DashboardPage() {
     include: { currentVersion: true, reviews: true },
   });
 
-  const myName = currentUserName();
-  const myRole = currentUserRole();
+  const myName = await currentUserName();
+  const myRole = await currentUserRole();
 
   // Action needed = two distinct reasons, both surfaced with why:
   //   1. A pending review assigned to a role you logged in as (only

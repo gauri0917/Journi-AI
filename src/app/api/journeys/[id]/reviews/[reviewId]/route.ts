@@ -18,8 +18,8 @@ export async function PATCH(
   try {
     const { id, reviewId } = await params;
 
-    const reviewerName = currentUserName();
-    const reviewerRole = currentUserRole();
+    const reviewerName = await currentUserName();
+    const reviewerRole = await currentUserRole();
     if (!reviewerRole) {
       return NextResponse.json(
         { error: "no role set for your login — add one at /login to review anything" },

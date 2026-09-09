@@ -11,7 +11,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     const journey = await prisma.journey.findUnique({ where: { id: id } });
     if (!journey) return NextResponse.json({ error: "not found" }, { status: 404 });
 
-    if (journey.createdBy !== currentUserName()) {
+    if (journey.createdBy !== await currentUserName()) {
       return NextResponse.json(
         { error: `only ${journey.createdBy} (who created this journey) can archive it` },
         { status: 403 }

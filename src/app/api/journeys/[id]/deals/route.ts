@@ -34,7 +34,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       journeyVersionId: journey.currentVersion.id,
       name,
       currentStageId: stages[0].id,
-      createdBy: currentUserName(),
+      createdBy: await currentUserName(),
     },
   });
 
