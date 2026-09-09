@@ -1,19 +1,19 @@
 import { describe, it, expect } from "vitest";
-import { namesMatch, evaluateThreshold, stageRequiresApproval, missingRequiredFields } from "@/lib/deal-run";
+import { roleMatches, evaluateThreshold, stageRequiresApproval, missingRequiredFields } from "@/lib/deal-run";
 import type { JourneyStage } from "@/lib/types";
 
-describe("namesMatch", () => {
+describe("roleMatches", () => {
   it("matches case- and whitespace-insensitively", () => {
-    expect(namesMatch("Priya Sharma", "priya sharma")).toBe(true);
-    expect(namesMatch("  Priya Sharma  ", "Priya Sharma")).toBe(true);
+    expect(roleMatches("legal_counsel", "Legal_Counsel")).toBe(true);
+    expect(roleMatches("  legal_counsel  ", "legal_counsel")).toBe(true);
   });
-  it("does not match different names", () => {
-    expect(namesMatch("Priya Sharma", "Jordan Lee")).toBe(false);
+  it("does not match different profile types", () => {
+    expect(roleMatches("sales_rep", "legal_counsel")).toBe(false);
   });
   it("returns false for null/undefined/empty", () => {
-    expect(namesMatch(null, "Priya")).toBe(false);
-    expect(namesMatch("Priya", undefined)).toBe(false);
-    expect(namesMatch("", "")).toBe(false);
+    expect(roleMatches(null, "legal_counsel")).toBe(false);
+    expect(roleMatches("legal_counsel", undefined)).toBe(false);
+    expect(roleMatches("", "")).toBe(false);
   });
 });
 
@@ -40,7 +40,7 @@ function baseStage(overrides: Partial<JourneyStage> = {}): JourneyStage {
     id: "stage_1",
     name: "Approval",
     order: 0,
-    owner_role: "Jordan Lee",
+    owner_role: "sales_rep",
     fields: [{ id: "discount_pct", label: "Discount %", type: "number", required: true }],
     required_documents: [],
     approval_required: false,
@@ -59,7 +59,7 @@ describe("stageRequiresApproval", () => {
   it("returns true only when the threshold condition is met", () => {
     const stage = baseStage({
       approval_required: true,
-      approver_role: "VP Sales",
+      approver_role: "vp_sales",
       approval_threshold: { field: "discount_pct", operator: "gt", value: 20 },
     });
     expect(stageRequiresApproval(stage, { discount_pct: 25 })).toBe(true);
