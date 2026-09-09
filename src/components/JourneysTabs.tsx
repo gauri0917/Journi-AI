@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { StatusBadge, Card } from "@/components/ui";
+import { StartDealForm } from "@/components/deals/StartDealForm";
 
 type JourneyRow = {
   id: string;
@@ -22,7 +23,20 @@ function stageCountOf(row: JourneyRow): number {
   return Array.isArray(stages) ? stages.length : 0;
 }
 
-export function JourneyList({ journeys, emptyLabel }: { journeys: JourneyRow[]; emptyLabel: string }) {
+// showStartDeal is only ever true for the "Live" tab (published journeys) —
+// starting a deal against a draft/in_review schema would be ambiguous about
+// which version the deal is actually running (see the comment in
+// api/journeys/[id]/deals/route.ts, which already enforces this server-side;
+// this just avoids offering the action anywhere it would be rejected).
+export function JourneyList({
+  journeys,
+  emptyLabel,
+  showStartDeal = false,
+}: {
+  journeys: JourneyRow[];
+  emptyLabel: string;
+  showStartDeal?: boolean;
+}) {
   if (journeys.length === 0) {
     return (
       <Card className="px-8 py-14 text-center">
@@ -35,9 +49,9 @@ export function JourneyList({ journeys, emptyLabel }: { journeys: JourneyRow[]; 
       {journeys.map((j) => {
         const stageCount = stageCountOf(j);
         return (
-          <li key={j.id}>
-            <Link href={`/journeys/${j.id}`} className="flex items-center justify-between gap-4 px-5 py-4 hover:bg-route-50/50">
-              <div className="min-w-0">
+          <li key={j.id} className="px-5 py-4">
+            <div className="flex items-center justify-between gap-4">
+              <Link href={`/journeys/${j.id}`} className="min-w-0 flex-1 hover:opacity-80">
                 <div className="flex items-center gap-2">
                   <p className="truncate font-medium text-ink">{j.name}</p>
                   <StatusBadge status={j.status} />
@@ -48,11 +62,16 @@ export function JourneyList({ journeys, emptyLabel }: { journeys: JourneyRow[]; 
                     ? ` · ${j.pendingReviewCount} reviewer${j.pendingReviewCount === 1 ? "" : "s"} pending`
                     : ""}
                 </p>
-              </div>
+              </Link>
               <span className="shrink-0 font-mono text-xs text-neutral-400">
                 v{j.currentVersion?.versionNumber ?? "—"}
               </span>
-            </Link>
+            </div>
+            {showStartDeal && j.status === "published" && (
+              <div className="mt-3 max-w-xs">
+                <StartDealForm journeyId={j.id} />
+              </div>
+            )}
           </li>
         );
       })}
@@ -194,7 +213,7 @@ export function JourneysTabs({
         </Card>
       )}
 
-      {tab === "live" && <JourneyList journeys={live} emptyLabel="no live journeys yet" />}
+      {tab === "live" && <JourneyList journeys={live} emptyLabel="no live journeys yet" showStartDeal />}
       {tab === "drafts" && <JourneyList journeys={drafts} emptyLabel="no drafts yet" />}
     </div>
   );

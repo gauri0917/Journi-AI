@@ -35,6 +35,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   </button>
                 </form>
               )}
+              <Link href="/" className="text-sm font-medium text-neutral-600 hover:text-route-700">
+                Journeys
+              </Link>
               <Link href="/deals" className="text-sm font-medium text-neutral-600 hover:text-route-700">
                 Deals
               </Link>
