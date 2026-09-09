@@ -9,7 +9,7 @@ const PUBLIC_PATHS = ["/login", "/api/auth/guest"];
 // exists only so a live demo URL isn't a completely open, actor-less
 // free-for-all sitting on a real (billed) OpenAI API key. Do not rely on
 // this for anything handling real customer data — add real auth first.
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   if (PUBLIC_PATHS.some((p) => pathname.startsWith(p)) || pathname.startsWith("/_next")) {

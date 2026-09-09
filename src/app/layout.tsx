@@ -8,11 +8,11 @@ export const metadata: Metadata = {
   description: "Self-serve B2B deal journey configuration",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // Reading cookies() here (in the root layout) makes every page dynamic —
   // acceptable here since nearly every page already queries Prisma directly
   // and was never a static-generation candidate anyway.
-  const guestName = cookies().get("journi_user")?.value;
+  const guestName = await (await cookies()).get("journi_user")?.value;
   const decodedName = guestName ? decodeURIComponent(guestName) : null;
 
   return (

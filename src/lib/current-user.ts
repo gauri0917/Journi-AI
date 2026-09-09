@@ -7,9 +7,9 @@ import { cookies } from "next/headers";
 // (or "Demo Owner") for any context without a request-scoped cookie jar,
 // e.g. the eval harness, which calls library functions directly outside the
 // Next.js server and would throw if cookies() were called unguarded there.
-export function currentUserName(): string {
+export async function currentUserName(): string {
   try {
-    const guestName = cookies().get("journi_user")?.value;
+    const guestName = await (await cookies()).get("journi_user")?.value;
     if (guestName && guestName.trim()) return decodeURIComponent(guestName).trim();
   } catch {
     // No request context available (e.g. called from a script) — fall through.
@@ -22,9 +22,9 @@ export function currentUserName(): string {
 // dashboard's "Action needed" tab to match against JourneyReview.reviewerRole
 // — nothing else in the app currently depends on this being present, so a
 // guest who skips it just won't see reviewer-based action items, not an error.
-export function currentUserRole(): string | null {
+export async function currentUserRole(): string | null {
   try {
-    const guestRole = cookies().get("journi_role")?.value;
+    const guestRole = await (await cookies()).get("journi_role")?.value;
     if (guestRole && guestRole.trim()) return decodeURIComponent(guestRole).trim();
   } catch {
     // No request context available — fall through.
