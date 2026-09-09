@@ -1,14 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
   const [name, setName] = useState("");
-  const [role, setRole] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const router = useRouter();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -19,14 +16,16 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/guest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), role: role.trim() }),
+        body: JSON.stringify({ name: name.trim() }),
       });
       if (!res.ok) throw new Error("failed");
-      router.push("/");
-      router.refresh();
+      // Hard reload, not router.push — forces a brand-new request that
+      // definitely carries the freshly-set cookie through middleware.
+      // A soft client-side navigation can race ahead of the cookie being
+      // attached, which is what was causing the stuck-on-login symptom.
+      window.location.href = "/";
     } catch {
       setError("Something went wrong — try again.");
-    } finally {
       setLoading(false);
     }
   }
@@ -51,22 +50,6 @@ export default function LoginPage() {
               maxLength={60}
               className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-route-500"
             />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-ink">
-              Your role <span className="font-normal text-neutral-400">(optional)</span>
-            </label>
-            <input
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-              placeholder="e.g. legal_counsel — matches the roles set up in Reviewer roles"
-              maxLength={60}
-              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-route-500"
-            />
-            <p className="mt-1 text-xs text-neutral-400">
-              Only used to show you review requests assigned to that role on your dashboard's "Action needed" tab —
-              skip it if you're just browsing.
-            </p>
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
           <button
