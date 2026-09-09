@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Card, Label, TextInput, Select, Checkbox, ErrorList } from "@/components/ui";
-import { namesMatch, stageRequiresApproval, missingRequiredFields } from "@/lib/deal-run";
+import { roleMatches, stageRequiresApproval, missingRequiredFields } from "@/lib/deal-run";
 import type { SchemaSnapshot, StageField } from "@/lib/types";
 
 type DealData = {
@@ -108,7 +108,17 @@ function CompletedStageCard({
   );
 }
 
-export function DealView({ deal, schema, actorName }: { deal: DealData; schema: SchemaSnapshot; actorName: string }) {
+export function DealView({
+  deal,
+  schema,
+  actorName,
+  actorRole,
+}: {
+  deal: DealData;
+  schema: SchemaSnapshot;
+  actorName: string;
+  actorRole: string | null;
+}) {
   const router = useRouter();
   const stages = [...schema.stages].sort((a, b) => a.order - b.order);
   const currentIndex = stages.findIndex((s) => s.id === deal.currentStageId);
@@ -122,8 +132,12 @@ export function DealView({ deal, schema, actorName }: { deal: DealData; schema: 
   const currentValues = currentStage ? deal.fieldValues[currentStage.id] : undefined;
   const currentApproval = currentStage ? deal.stageApprovals[currentStage.id] : undefined;
   const needsApproval = currentStage && currentValues ? stageRequiresApproval(currentStage, currentValues) : false;
-  const isOwnerOfCurrent = currentStage ? namesMatch(actorName, currentStage.owner_role) : false;
-  const isApproverOfCurrent = currentStage ? namesMatch(actorName, currentStage.approver_role) : false;
+  // Matched on profile type (actorRole), not name — owner_role/approver_role
+  // are always profile-type strings (e.g. "legal_counsel"), the same
+  // convention used everywhere else in this schema.
+  const isOwnerOfCurrent = currentStage ? roleMatches(actorRole, currentStage.owner_role) : false;
+  const isApproverOfCurrent = currentStage ? roleMatches(actorRole, currentStage.approver_role) : false;
+  const actorLabel = actorRole ? `${actorName} (${actorRole})` : `${actorName} — no profile type set`;
 
   async function submitStage() {
     if (!currentStage) return;
@@ -229,8 +243,8 @@ export function DealView({ deal, schema, actorName }: { deal: DealData; schema: 
               </div>
             ) : (
               <p className="rounded-md border border-dashed border-neutral-300 bg-neutral-50 px-4 py-6 text-center text-sm text-neutral-500">
-                Waiting for <span className="font-medium text-ink">{currentStage.owner_role}</span> to fill this
-                stage in — you're logged in as {actorName}.
+                Waiting for profile type <span className="font-medium text-ink">{currentStage.owner_role}</span> to
+                fill this stage in — you're logged in as {actorLabel}.
               </p>
             )
           ) : needsApproval && !currentApproval ? (
@@ -255,8 +269,8 @@ export function DealView({ deal, schema, actorName }: { deal: DealData; schema: 
                 </div>
               ) : (
                 <p className="rounded-md border border-dashed border-amber-300 bg-amber-50 px-4 py-4 text-center text-sm text-amber-800">
-                  Waiting for <span className="font-medium">{currentStage.approver_role}</span> to approve — you're
-                  logged in as {actorName}.
+                  Waiting for profile type <span className="font-medium">{currentStage.approver_role}</span> to
+                  approve — you're logged in as {actorLabel}.
                 </p>
               )}
             </div>

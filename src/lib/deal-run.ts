@@ -1,11 +1,13 @@
 import type { ApprovalThreshold, JourneyStage } from "./types";
 
-// Case/whitespace-insensitive — a guest typing "priya sharma" at login
-// should still match a stage configured with "Priya Sharma". This is a
-// demo-grade match, not a real identity system (see current-user.ts).
-export function namesMatch(a: string | null | undefined, b: string | null | undefined): boolean {
-  if (!a || !b) return false;
-  return a.trim().toLowerCase() === b.trim().toLowerCase();
+// Compares a logged-in guest's PROFILE TYPE (e.g. "legal_counsel", set at
+// login — see current-user.ts / login/page.tsx) against a stage's
+// owner_role / approver_role. These are always profile-type strings, the
+// same convention journey creation uses everywhere else in this schema —
+// never a specific person's name. Case/whitespace-insensitive.
+export function roleMatches(actorRole: string | null | undefined, stageRole: string | null | undefined): boolean {
+  if (!actorRole || !stageRole) return false;
+  return actorRole.trim().toLowerCase() === stageRole.trim().toLowerCase();
 }
 
 export type StageFieldValues = Record<string, unknown>;

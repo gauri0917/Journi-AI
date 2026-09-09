@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/db";
 import { JourneysTabs } from "@/components/JourneysTabs";
 import { currentUserName, currentUserRole } from "@/lib/current-user";
+import { roleMatches, stageRequiresApproval } from "@/lib/deal-run";
+import type { SchemaSnapshot } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -13,15 +15,15 @@ export default async function DashboardPage() {
   const myName = await currentUserName();
   const myRole = await currentUserRole();
 
-  // Action needed = two distinct reasons, both surfaced with why:
-  //   1. A pending review assigned to a role you logged in as (only
-  //      computable if you gave a role at login — see /login).
-  //   2. Your own journey still sitting in draft, never submitted for
-  //      review — i.e. it hasn't been validated/moved forward yet and
-  //      nothing happens to it until you act.
-  // Both are real "this needs YOU specifically" states, as opposed to
-  // "Live"/"Drafts" which just show everything regardless of who it's
-  // waiting on.
+  // Action needed = three distinct reasons, each surfaced with why:
+  //   1. A pending review assigned to the profile type you logged in as
+  //      (only computable if you gave one at login — see /login).
+  //   2. Your own journey still sitting in draft, never submitted.
+  //   3. A live deal whose current stage is waiting on your profile type,
+  //      either to fill in the stage (owner_role) or approve it
+  //      (approver_role) — see src/lib/deal-run.ts for the matching logic.
+  // All three are real "this needs YOU specifically" states, as opposed to
+  // "Live"/"Drafts" which show everything regardless of who it's waiting on.
   const actionNeeded = journeys
     .map((j: (typeof journeys)[number]) => {
       const reasons: string[] = [];
@@ -41,6 +43,43 @@ export default async function DashboardPage() {
       return { journey: j, reasons };
     })
     .filter((x: { reasons: string[] }) => x.reasons.length > 0);
+
+  // Live deals whose current stage is waiting on my profile type.
+  const dealActionNeeded: { dealId: string; dealName: string; journeyName: string; reason: string }[] = [];
+  if (myRole) {
+    const inProgressDeals = await prisma.deal.findMany({
+      where: { status: "in_progress" },
+      include: { journey: true, journeyVersion: true },
+    });
+    for (const deal of inProgressDeals) {
+      if (!deal.currentStageId) continue;
+      const schema = deal.journeyVersion.schemaSnapshot as unknown as SchemaSnapshot;
+      const stage = schema.stages.find((s) => s.id === deal.currentStageId);
+      if (!stage) continue;
+
+      const fieldValues = (deal.fieldValues as Record<string, Record<string, unknown>>) ?? {};
+      const stageValues = fieldValues[stage.id];
+
+      if (!stageValues && roleMatches(myRole, stage.owner_role)) {
+        dealActionNeeded.push({
+          dealId: deal.id,
+          dealName: deal.name,
+          journeyName: deal.journey.name,
+          reason: `Your input is needed at "${stage.name}" (as ${stage.owner_role})`,
+        });
+      } else if (stageValues && stageRequiresApproval(stage, stageValues)) {
+        const approvals = (deal.stageApprovals as Record<string, unknown>) ?? {};
+        if (!approvals[stage.id] && roleMatches(myRole, stage.approver_role)) {
+          dealActionNeeded.push({
+            dealId: deal.id,
+            dealName: deal.name,
+            journeyName: deal.journey.name,
+            reason: `Your approval is needed at "${stage.name}" (as ${stage.approver_role})`,
+          });
+        }
+      }
+    }
+  }
 
   // Shape down to exactly what the client tabs component needs — keeps the
   // server/client boundary explicit rather than passing raw Prisma rows
@@ -70,7 +109,7 @@ export default async function DashboardPage() {
           Configure a deal journey yourself — no CRM admin ticket required.
         </p>
       </div>
-      <JourneysTabs journeys={rows} actionNeeded={actionRows} />
+      <JourneysTabs journeys={rows} actionNeeded={actionRows} dealActionNeeded={dealActionNeeded} />
     </div>
   );
 }

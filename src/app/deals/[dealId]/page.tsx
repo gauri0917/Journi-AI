@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { currentUserName } from "@/lib/current-user";
+import { currentUserName, currentUserRole } from "@/lib/current-user";
 import { DealView } from "@/components/deals/DealView";
 import type { SchemaSnapshot } from "@/lib/types";
 
@@ -39,6 +39,7 @@ export default async function DealDetailPage({ params }: { params: Promise<{ dea
         }}
         schema={schema}
         actorName={await currentUserName()}
+        actorRole={await currentUserRole()}
       />
     </div>
   );

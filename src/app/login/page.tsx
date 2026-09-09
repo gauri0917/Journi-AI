@@ -4,6 +4,7 @@ import { useState } from "react";
 
 export default function LoginPage() {
   const [name, setName] = useState("");
+  const [role, setRole] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -16,7 +17,7 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/guest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim() }),
+        body: JSON.stringify({ name: name.trim(), role: role.trim() }),
       });
       if (!res.ok) throw new Error("failed");
       // Hard reload, not router.push — forces a brand-new request that
@@ -50,6 +51,22 @@ export default function LoginPage() {
               maxLength={60}
               className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-route-500"
             />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-ink">
+              Your profile type <span className="font-normal text-neutral-400">(e.g. legal_counsel)</span>
+            </label>
+            <input
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              placeholder="Matches the Owner role / Approver role / Reviewer roles set on a journey"
+              maxLength={60}
+              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-route-500"
+            />
+            <p className="mt-1 text-xs text-neutral-400">
+              Required to fill in or approve a live deal's stages, and to mark a review reviewed. Skip it if you're
+              just browsing.
+            </p>
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
           <button

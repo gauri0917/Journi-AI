@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { currentUserName } from "@/lib/current-user";
-import { namesMatch, stageRequiresApproval, type StageFieldValues } from "@/lib/deal-run";
+import { currentUserName, currentUserRole } from "@/lib/current-user";
+import { roleMatches, stageRequiresApproval, type StageFieldValues } from "@/lib/deal-run";
 import type { SchemaSnapshot } from "@/lib/types";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ dealId: string }> }) {
@@ -36,17 +36,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ dea
     return NextResponse.json({ error: "this stage was already approved" }, { status: 409 });
   }
 
-  const actor = await currentUserName();
-  if (!namesMatch(actor, stage.approver_role)) {
+  const actorRole = await currentUserRole();
+  if (!roleMatches(actorRole, stage.approver_role)) {
     return NextResponse.json(
-      { error: `only "${stage.approver_role}" can approve this stage — you're logged in as "${actor}"` },
+      { error: `only profile type "${stage.approver_role}" can approve this stage — you're logged in as "${actorRole ?? "no profile type set"}"` },
       { status: 403 }
     );
   }
 
+  const actorName = await currentUserName();
   const updatedApprovals = {
     ...approvals,
-    [stage.id]: { approvedBy: actor, approvedAt: new Date().toISOString(), comment },
+    [stage.id]: { approvedBy: actorName, approvedAt: new Date().toISOString(), comment },
   };
 
   const next = stages[stageIndex + 1];

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { currentUserName } from "@/lib/current-user";
-import { namesMatch, stageRequiresApproval, missingRequiredFields, type StageFieldValues } from "@/lib/deal-run";
+import { currentUserRole } from "@/lib/current-user";
+import { roleMatches, stageRequiresApproval, missingRequiredFields, type StageFieldValues } from "@/lib/deal-run";
 import type { SchemaSnapshot } from "@/lib/types";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ dealId: string }> }) {
@@ -22,10 +22,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ dea
   const stage = stages[stageIndex];
   if (!stage) return NextResponse.json({ error: "current stage not found in schema" }, { status: 500 });
 
-  const actor = await currentUserName();
-  if (!namesMatch(actor, stage.owner_role)) {
+  const actorRole = await currentUserRole();
+  if (!roleMatches(actorRole, stage.owner_role)) {
     return NextResponse.json(
-      { error: `only "${stage.owner_role}" can fill in this stage — you're logged in as "${actor}"` },
+      { error: `only profile type "${stage.owner_role}" can fill in this stage — you're logged in as "${actorRole ?? "no profile type set"}"` },
       { status: 403 }
     );
   }

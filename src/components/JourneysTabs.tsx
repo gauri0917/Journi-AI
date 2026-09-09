@@ -15,6 +15,8 @@ type JourneyRow = {
 
 type ActionRow = JourneyRow & { reasons: string[] };
 
+type DealActionRow = { dealId: string; dealName: string; journeyName: string; reason: string };
+
 function stageCountOf(row: JourneyRow): number {
   const stages = (row.currentVersion?.schemaSnapshot as any)?.stages;
   return Array.isArray(stages) ? stages.length : 0;
@@ -58,14 +60,14 @@ export function JourneyList({ journeys, emptyLabel }: { journeys: JourneyRow[]; 
   );
 }
 
-function ActionNeededList({ journeys }: { journeys: ActionRow[] }) {
-  if (journeys.length === 0) {
+function ActionNeededList({ journeys, deals }: { journeys: ActionRow[]; deals: DealActionRow[] }) {
+  if (journeys.length === 0 && deals.length === 0) {
     return (
       <Card className="px-8 py-14 text-center">
         <p className="font-mono text-sm text-neutral-400">— nothing needs your action right now —</p>
         <p className="mt-2 text-xs text-neutral-400">
-          This fills in when a journey you own is still a draft, or a review is pending for the role you logged in
-          as. No role set?{" "}
+          This fills in when a journey you own is still a draft, a review is pending for the profile type you
+          logged in as, or a live deal's current stage is waiting on that profile type. No profile type set?{" "}
           <Link href="/login" className="text-route-600 hover:underline">
             Add one
           </Link>
@@ -77,7 +79,7 @@ function ActionNeededList({ journeys }: { journeys: ActionRow[] }) {
   return (
     <ul className="divide-y divide-neutral-200 rounded-lg border border-neutral-200 bg-white shadow-sm">
       {journeys.map((j) => (
-        <li key={j.id}>
+        <li key={`journey-${j.id}`}>
           <Link href={`/journeys/${j.id}`} className="flex items-center justify-between gap-4 px-5 py-4 hover:bg-route-50/50">
             <div className="min-w-0">
               <div className="flex items-center gap-2">
@@ -92,6 +94,22 @@ function ActionNeededList({ journeys }: { journeys: ActionRow[] }) {
           </Link>
         </li>
       ))}
+      {deals.map((d) => (
+        <li key={`deal-${d.dealId}`}>
+          <Link href={`/deals/${d.dealId}`} className="flex items-center justify-between gap-4 px-5 py-4 hover:bg-route-50/50">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <p className="truncate font-medium text-ink">{d.dealName}</p>
+                <span className="rounded-full border border-route-300 bg-route-50 px-2 py-0.5 text-xs font-medium text-route-700">
+                  live deal
+                </span>
+              </div>
+              <p className="mt-0.5 truncate text-xs text-neutral-400">on {d.journeyName}</p>
+              <p className="mt-1 text-sm text-amber-700">{d.reason}</p>
+            </div>
+          </Link>
+        </li>
+      ))}
     </ul>
   );
 }
@@ -100,15 +118,24 @@ function ActionNeededList({ journeys }: { journeys: ActionRow[] }) {
 // something in it — that's the whole point of a dashboard: land somewhere
 // useful, not on a generic list you have to scan yourself. Falls back to
 // "new" (empty state) or "drafts" otherwise, same as before.
-export function JourneysTabs({ journeys, actionNeeded }: { journeys: JourneyRow[]; actionNeeded: ActionRow[] }) {
-  const defaultTab = actionNeeded.length > 0 ? "action" : journeys.length === 0 ? "new" : "drafts";
+export function JourneysTabs({
+  journeys,
+  actionNeeded,
+  dealActionNeeded,
+}: {
+  journeys: JourneyRow[];
+  actionNeeded: ActionRow[];
+  dealActionNeeded: DealActionRow[];
+}) {
+  const totalActionCount = actionNeeded.length + dealActionNeeded.length;
+  const defaultTab = totalActionCount > 0 ? "action" : journeys.length === 0 ? "new" : "drafts";
   const [tab, setTab] = useState<"action" | "new" | "live" | "drafts">(defaultTab);
 
   const live = journeys.filter((j) => j.status === "published");
   const drafts = journeys.filter((j) => j.status === "draft" || j.status === "in_review" || j.status === "archived");
 
   const tabs: { key: typeof tab; label: string; count?: number }[] = [
-    { key: "action", label: "Action needed", count: actionNeeded.length },
+    { key: "action", label: "Action needed", count: totalActionCount },
     { key: "new", label: "New journey" },
     { key: "live", label: "Live", count: live.length },
     { key: "drafts", label: "Drafts", count: drafts.length },
@@ -141,7 +168,7 @@ export function JourneysTabs({ journeys, actionNeeded }: { journeys: JourneyRow[
         ))}
       </div>
 
-      {tab === "action" && <ActionNeededList journeys={actionNeeded} />}
+      {tab === "action" && <ActionNeededList journeys={actionNeeded} deals={dealActionNeeded} />}
 
       {tab === "new" && (
         <Card className="p-8">
