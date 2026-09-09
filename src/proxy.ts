@@ -9,6 +9,12 @@ const PUBLIC_PATHS = ["/login", "/api/auth/guest"];
 // exists only so a live demo URL isn't a completely open, actor-less
 // free-for-all sitting on a real (billed) OpenAI API key. Do not rely on
 // this for anything handling real customer data — add real auth first.
+//
+// NOTE: as of Next.js 16, this file MUST be named exactly `proxy.ts`
+// (not `middleware.ts`) and export a function named exactly `proxy`
+// (not `middleware`) — Next.js renamed the whole convention in v16.
+// A `middleware.ts` file is silently ignored with no build warning,
+// which is exactly what happened here.
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
