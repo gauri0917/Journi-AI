@@ -1,0 +1,40 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  background-color: #fafaf9;
+  background-image:
+    linear-gradient(#eceae5 1px, transparent 1px),
+    linear-gradient(90deg, #eceae5 1px, transparent 1px);
+  background-size: 32px 32px;
+  background-position: -1px -1px;
+}
+
+::selection {
+  background-color: #dce8ff;
+}
+
+.stage-rail {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    #96b6f0 0,
+    #96b6f0 6px,
+    transparent 6px,
+    transparent 12px
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

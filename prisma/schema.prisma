@@ -1,0 +1,158 @@
+// Journi — Prisma schema
+// Exactly the three tables specified: journeys, journey_versions, journey_reviews.
+// journey_versions is append-only by convention: the app code never issues
+// UPDATE/DELETE against it — see src/lib/db.ts and the publish route for the
+// only write path (a plain create()).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum JourneyStatus {
+  draft
+  in_review
+  published
+  archived
+
+  @@map("journey_status")
+}
+
+enum ReviewStatus {
+  pending
+  reviewed
+
+  @@map("review_status")
+}
+
+model Journey {
+  id               String        @id @default(uuid())
+  name             String
+  description      String?
+  productType      String        @map("product_type")
+  status           JourneyStatus @default(draft)
+  currentVersionId String?       @unique @map("current_version_id")
+  createdBy        String        @map("created_by")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+
+  // currentVersion is the published/live snapshot pointer. It is a distinct
+  // relation from `versions` (the full append-only history) so that setting
+  // it never has to touch the version rows themselves.
+  currentVersion JourneyVersion? @relation("CurrentVersion", fields: [currentVersionId], references: [id])
+  versions       JourneyVersion[] @relation("JourneyVersions")
+  reviews        JourneyReview[]
+  deals          Deal[]
+
+  @@map("journeys")
+}
+
+model JourneyVersion {
+  id                String    @id @default(uuid())
+  journeyId         String    @map("journey_id")
+  versionNumber     Int       @map("version_number")
+  schemaSnapshot    Json      @map("schema_snapshot")
+  publishedAt       DateTime  @default(now()) @map("published_at")
+  publishedBy       String    @map("published_by")
+  // Populated only when this version originated from AI-assisted
+  // generation — the raw process description the user pasted/typed. Null
+  // for manually-built versions. This is the RAG corpus's raw material: see
+  // AiDraftExample and src/lib/rag.ts. Added specifically to support
+  // retrieval-augmented generation — not part of the original locked schema.
+  sourceDescription String?   @map("source_description")
+
+  journey        Journey  @relation("JourneyVersions", fields: [journeyId], references: [id])
+  // Reverse side of Journey.currentVersion. A version row never has an FK
+  // back to "the journey that currently points at it" — that pointer lives
+  // only on Journey.currentVersionId. This relation name pairs with it so
+  // Prisma can validate the 1:1, but the version table itself stays
+  // append-only: nothing here is ever updated after creation.
+  isCurrentFor   Journey? @relation("CurrentVersion")
+  deals          Deal[]
+
+  @@unique([journeyId, versionNumber])
+  @@map("journey_versions")
+}
+
+// RAG corpus for AI-assisted draft generation. A row is written ONLY when a
+// journey whose current version has a sourceDescription reaches "published"
+// status (see the publish route) — i.e. only descriptions that produced a
+// draft good enough to survive the full review gate feed back into future
+// retrieval. This is a deliberate quality filter, not every generation.
+//
+// `embedding` uses pgvector (`vector` extension), which Prisma doesn't map
+// natively — it's declared Unsupported and read/written via $queryRaw /
+// $executeRaw in src/lib/rag.ts, never through normal Prisma Client calls.
+// Requires `CREATE EXTENSION IF NOT EXISTS vector;` run once against the
+// database before migrating — see RAG.md for the exact setup steps.
+model AiDraftExample {
+  id             String                 @id @default(uuid())
+  description    String
+  schemaSnapshot Json                   @map("schema_snapshot")
+  embedding      Unsupported("vector(1536)")
+  createdAt      DateTime               @default(now()) @map("created_at")
+
+  @@map("ai_draft_examples")
+}
+
+model JourneyReview {
+  id           String       @id @default(uuid())
+  journeyId    String       @map("journey_id")
+  reviewerRole String       @map("reviewer_role")
+  reviewedBy   String?      @map("reviewed_by")
+  status       ReviewStatus @default(pending)
+  comment      String?
+  reviewedAt   DateTime?    @map("reviewed_at")
+
+  journey      Journey @relation(fields: [journeyId], references: [id])
+
+  @@map("journey_reviews")
+}
+
+enum DealStatus {
+  in_progress
+  completed
+
+  @@map("deal_status")
+}
+
+// A Deal — a real, first-class entity: a live instance of a customer moving
+// through a published journey's stages, one at a time. Deals are created
+// and progressed through the app, not a side demo — this is the actual
+// runtime the earlier "config only" scope line explicitly excluded, before
+// a deliberate decision was made to build it for real.
+//
+// Gating is a plain string match against currentUserName() — owner_role and
+// approver_role are NOT renamed or restructured; a stage configured with
+// owner_role: "Priya Sharma" just means the guest logged in as "Priya Sharma"
+// is the one who can fill that stage in. No schema changes needed elsewhere
+// (validation.ts, the AI prompts, StageCard) because as far as they're
+// concerned it's still just a string field.
+model Deal {
+  id               String     @id @default(uuid())
+  journeyId        String     @map("journey_id")
+  journeyVersionId String     @map("journey_version_id")
+  name             String     // a label for this deal, e.g. "Acme Corp deal"
+  status           DealStatus @default(in_progress)
+  // Id of the schema_snapshot stage currently awaiting action (fields not
+  // yet submitted, OR submitted but still awaiting approval). Null once
+  // status is "completed" — there's no "current" stage left.
+  currentStageId   String?    @map("current_stage_id")
+  // { [stageId]: { [fieldId]: value } } — submitted field values per stage,
+  // append-only in practice (a stage's entry is written once, on submit).
+  fieldValues      Json       @default("{}") @map("field_values")
+  // { [stageId]: { approvedBy: string, approvedAt: string, comment?: string } }
+  stageApprovals   Json       @default("{}") @map("stage_approvals")
+  createdBy        String     @map("created_by")
+  createdAt        DateTime   @default(now()) @map("created_at")
+  updatedAt        DateTime   @updatedAt @map("updated_at")
+
+  journey        Journey        @relation(fields: [journeyId], references: [id])
+  journeyVersion JourneyVersion @relation(fields: [journeyVersionId], references: [id])
+
+  @@map("deals")
+}

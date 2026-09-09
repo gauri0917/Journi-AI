@@ -1,0 +1,16 @@
+version: "3.9"
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: journi
+      POSTGRES_PASSWORD: journi
+      POSTGRES_DB: journi
+    ports:
+      - "5432:5432"
+    volumes:
+      - journi_pgdata:/var/lib/postgresql/data
+
+volumes:
+  journi_pgdata:
