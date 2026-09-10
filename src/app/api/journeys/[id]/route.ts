@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { currentUserName } from "@/lib/current-user";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -13,6 +14,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       },
     });
     if (!journey) {
+      return NextResponse.json({ error: "not found" }, { status: 404 });
+    }
+    // Drafts are private to their creator — respond as not-found for anyone
+    // else so the API doesn't leak drafts that the pages already hide.
+    if (journey.status === "draft" && journey.createdBy !== (await currentUserName())) {
       return NextResponse.json({ error: "not found" }, { status: 404 });
     }
     return NextResponse.json({ journey });
@@ -35,6 +41,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     const journey = await prisma.journey.findUnique({ where: { id: id } });
     if (!journey) return NextResponse.json({ error: "not found" }, { status: 404 });
+    if (journey.status === "draft" && journey.createdBy !== (await currentUserName())) {
+      return NextResponse.json({ error: "not found" }, { status: 404 });
+    }
     if (journey.status === "published" || journey.status === "archived") {
       return NextResponse.json(
         { error: `cannot edit basics from status "${journey.status}"` },

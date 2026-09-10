@@ -24,6 +24,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const journey = await prisma.journey.findUnique({ where: { id: id } });
   if (!journey) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (journey.status === "draft" && journey.createdBy !== (await currentUserName())) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
   if (journey.status === "published" || journey.status === "archived") {
     return NextResponse.json(
       { error: `cannot submit for review from status "${journey.status}"` },

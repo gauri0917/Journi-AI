@@ -8,7 +8,12 @@ export async function GET() {
       orderBy: { updatedAt: "desc" },
       include: { currentVersion: true, reviews: true },
     });
-    return NextResponse.json({ journeys });
+    // Drafts are only visible to the profile that created them — in_review,
+    // published, and archived stay visible to everyone (reviewers need to
+    // see in_review; published/archived are the org-wide record).
+    const me = await currentUserName();
+    const visible = journeys.filter((j) => j.status !== "draft" || j.createdBy === me);
+    return NextResponse.json({ journeys: visible });
   } catch (err) {
     console.error("GET /api/journeys failed:", err);
     const message = err instanceof Error ? err.message : String(err);

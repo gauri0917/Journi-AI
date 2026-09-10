@@ -22,6 +22,9 @@ export default async function JourneyDetailPage({ params }: { params: Promise<{ 
   if (!journey) notFound();
 
   const isOwner = journey.createdBy === await currentUserName();
+  // Drafts are private to their creator. Treat it as not-found for anyone
+  // else rather than a 403, so a draft's existence isn't revealed either.
+  if (journey.status === "draft" && !isOwner) notFound();
   const pending = journey.reviews.filter((r: (typeof journey.reviews)[number]) => r.status === "pending");
   const canEdit = journey.status === "draft" || journey.status === "in_review";
   const canPreview = !!journey.currentVersionId;

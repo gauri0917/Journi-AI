@@ -12,9 +12,16 @@ function wordCount(text: string): number {
 export function AIGenerateModal({
   onClose,
   onGenerated,
+  variant = "modal",
 }: {
-  onClose: () => void;
+  onClose?: () => void;
   onGenerated: (schema: SchemaSnapshot, stageConfidence: StageConfidence, sourceDescription: string) => void;
+  // "modal" (default) keeps the original popup-over-the-page behavior.
+  // "inline" renders the same form/generate/clarification logic as a plain
+  // block with no overlay, header, or close button — used to embed this as
+  // a step of the wizard (the dedicated "Draft with AI" flow) rather than a
+  // popup shown on top of the basics/stages steps.
+  variant?: "modal" | "inline";
 }) {
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
@@ -92,22 +99,8 @@ export function AIGenerateModal({
     }
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div className="max-h-[85vh] w-full max-w-xl overflow-y-auto rounded-lg bg-white p-6 shadow-xl">
-        <div className="mb-4 flex items-start justify-between">
-          <div>
-            <h2 className="text-lg font-semibold">Draft with AI</h2>
-            <p className="mt-1 text-sm text-neutral-500">
-              Paste a plain-text description of the product or process. AI drafts stages, fields,
-              approvals, and required documents — every value stays flagged until you review it.
-            </p>
-          </div>
-          <button onClick={onClose} className="text-neutral-400 hover:text-ink" aria-label="Close">
-            ✕
-          </button>
-        </div>
-
+  const body = (
+    <>
         {clarification ? (
           <div className="space-y-4">
             <div className="rounded-md border border-amber-300 bg-amber-50 p-4">
@@ -166,15 +159,40 @@ export function AIGenerateModal({
             <ErrorList errors={errors} />
 
             <div className="mt-4 flex justify-end gap-2">
-              <Button type="button" variant="ghost" onClick={onClose}>
-                Cancel
-              </Button>
+              {onClose && (
+                <Button type="button" variant="ghost" onClick={onClose}>
+                  Cancel
+                </Button>
+              )}
               <Button type="button" onClick={() => generate(description)} disabled={!wordsValid || loading}>
                 {loading ? "Generating…" : "Generate draft"}
               </Button>
             </div>
           </>
         )}
+    </>
+  );
+
+  if (variant === "inline") {
+    return <div>{body}</div>;
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+      <div className="max-h-[85vh] w-full max-w-xl overflow-y-auto rounded-lg bg-white p-6 shadow-xl">
+        <div className="mb-4 flex items-start justify-between">
+          <div>
+            <h2 className="text-lg font-semibold">Draft with AI</h2>
+            <p className="mt-1 text-sm text-neutral-500">
+              Paste a plain-text description of the product or process. AI drafts stages, fields,
+              approvals, and required documents — every value stays flagged until you review it.
+            </p>
+          </div>
+          <button onClick={onClose} className="text-neutral-400 hover:text-ink" aria-label="Close">
+            ✕
+          </button>
+        </div>
+        {body}
       </div>
     </div>
   );

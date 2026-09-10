@@ -1,0 +1,384 @@
+diff --git a/src/app/api/journeys/[id]/route.ts b/src/app/api/journeys/[id]/route.ts
+index 40a3b9e2..37164294 100644
+--- a/src/app/api/journeys/[id]/route.ts
++++ b/src/app/api/journeys/[id]/route.ts
+@@ -1,5 +1,6 @@
+ import { NextRequest, NextResponse } from "next/server";
+ import { prisma } from "@/lib/db";
++import { currentUserName } from "@/lib/current-user";
+ 
+ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+   const { id } = await params;
+@@ -15,6 +16,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
+     if (!journey) {
+       return NextResponse.json({ error: "not found" }, { status: 404 });
+     }
++    // Drafts are private to their creator — respond as not-found for anyone
++    // else so the API doesn't leak drafts that the pages already hide.
++    if (journey.status === "draft" && journey.createdBy !== (await currentUserName())) {
++      return NextResponse.json({ error: "not found" }, { status: 404 });
++    }
+     return NextResponse.json({ journey });
+   } catch (err) {
+     console.error("GET /api/journeys/[id] failed:", err);
+@@ -35,6 +41,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
+ 
+     const journey = await prisma.journey.findUnique({ where: { id: id } });
+     if (!journey) return NextResponse.json({ error: "not found" }, { status: 404 });
++    if (journey.status === "draft" && journey.createdBy !== (await currentUserName())) {
++      return NextResponse.json({ error: "not found" }, { status: 404 });
++    }
+     if (journey.status === "published" || journey.status === "archived") {
+       return NextResponse.json(
+         { error: `cannot edit basics from status "${journey.status}"` },
+diff --git a/src/app/api/journeys/[id]/submit-review/route.ts b/src/app/api/journeys/[id]/submit-review/route.ts
+index b0aa8f2f..7aff0723 100644
+--- a/src/app/api/journeys/[id]/submit-review/route.ts
++++ b/src/app/api/journeys/[id]/submit-review/route.ts
+@@ -24,6 +24,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
+ 
+   const journey = await prisma.journey.findUnique({ where: { id: id } });
+   if (!journey) return NextResponse.json({ error: "not found" }, { status: 404 });
++  if (journey.status === "draft" && journey.createdBy !== (await currentUserName())) {
++    return NextResponse.json({ error: "not found" }, { status: 404 });
++  }
+   if (journey.status === "published" || journey.status === "archived") {
+     return NextResponse.json(
+       { error: `cannot submit for review from status "${journey.status}"` },
+diff --git a/src/app/api/journeys/route.ts b/src/app/api/journeys/route.ts
+index 508c3c4e..21cace58 100644
+--- a/src/app/api/journeys/route.ts
++++ b/src/app/api/journeys/route.ts
+@@ -8,7 +8,12 @@ export async function GET() {
+       orderBy: { updatedAt: "desc" },
+       include: { currentVersion: true, reviews: true },
+     });
+-    return NextResponse.json({ journeys });
++    // Drafts are only visible to the profile that created them — in_review,
++    // published, and archived stay visible to everyone (reviewers need to
++    // see in_review; published/archived are the org-wide record).
++    const me = await currentUserName();
++    const visible = journeys.filter((j) => j.status !== "draft" || j.createdBy === me);
++    return NextResponse.json({ journeys: visible });
+   } catch (err) {
+     console.error("GET /api/journeys failed:", err);
+     const message = err instanceof Error ? err.message : String(err);
+diff --git a/src/app/journeys/[id]/edit/page.tsx b/src/app/journeys/[id]/edit/page.tsx
+index 18a93be9..ff7f8431 100644
+--- a/src/app/journeys/[id]/edit/page.tsx
++++ b/src/app/journeys/[id]/edit/page.tsx
+@@ -1,6 +1,7 @@
+ import { notFound, redirect } from "next/navigation";
+ import { prisma } from "@/lib/db";
+ import { BuilderWizard } from "@/components/builder/BuilderWizard";
++import { currentUserName } from "@/lib/current-user";
+ import type { SchemaSnapshot } from "@/lib/types";
+ 
+ export const dynamic = "force-dynamic";
+@@ -12,6 +13,9 @@ export default async function EditJourneyPage({ params }: { params: Promise<{ id
+     include: { currentVersion: true },
+   });
+   if (!journey) notFound();
++  // Drafts are private to their creator — nobody else should even be able
++  // to reach the editor for one via a direct URL.
++  if (journey.status === "draft" && journey.createdBy !== (await currentUserName())) notFound();
+   if (journey.status === "published" || journey.status === "archived") {
+     redirect(`/journeys/${journey.id}`);
+   }
+diff --git a/src/app/journeys/[id]/page.tsx b/src/app/journeys/[id]/page.tsx
+index bfdbd648..40a0897f 100644
+--- a/src/app/journeys/[id]/page.tsx
++++ b/src/app/journeys/[id]/page.tsx
+@@ -22,6 +22,9 @@ export default async function JourneyDetailPage({ params }: { params: Promise<{
+   if (!journey) notFound();
+ 
+   const isOwner = journey.createdBy === await currentUserName();
++  // Drafts are private to their creator. Treat it as not-found for anyone
++  // else rather than a 403, so a draft's existence isn't revealed either.
++  if (journey.status === "draft" && !isOwner) notFound();
+   const pending = journey.reviews.filter((r: (typeof journey.reviews)[number]) => r.status === "pending");
+   const canEdit = journey.status === "draft" || journey.status === "in_review";
+   const canPreview = !!journey.currentVersionId;
+diff --git a/src/app/page.tsx b/src/app/page.tsx
+index 40a40a69..913ccaab 100644
+--- a/src/app/page.tsx
++++ b/src/app/page.tsx
+@@ -15,6 +15,12 @@ export default async function DashboardPage() {
+   const myName = await currentUserName();
+   const myRole = await currentUserRole();
+ 
++  // Drafts are private to their creator — in_review/published/archived stay
++  // visible to everyone (reviewers need in_review; the rest is the org-wide
++  // record). Filtering here, before anything below reads `journeys`, keeps
++  // other people's drafts out of both the tab lists and Action needed.
++  const visibleJourneys = journeys.filter((j) => j.status !== "draft" || j.createdBy === myName);
++
+   // Action needed = three distinct reasons, each surfaced with why:
+   //   1. A pending review assigned to the profile type you logged in as
+   //      (only computable if you gave one at login — see /login).
+@@ -24,7 +30,7 @@ export default async function DashboardPage() {
+   //      (approver_role) — see src/lib/deal-run.ts for the matching logic.
+   // All three are real "this needs YOU specifically" states, as opposed to
+   // "Live"/"Drafts" which show everything regardless of who it's waiting on.
+-  const actionNeeded = journeys
++  const actionNeeded = visibleJourneys
+     .map((j: (typeof journeys)[number]) => {
+       const reasons: string[] = [];
+ 
+@@ -95,7 +101,7 @@ export default async function DashboardPage() {
+     pendingReviewCount: j.reviews.filter((r: (typeof j.reviews)[number]) => r.status === "pending").length,
+   });
+ 
+-  const rows = journeys.map(toRow);
++  const rows = visibleJourneys.map(toRow);
+   const actionRows = actionNeeded.map((x: { journey: (typeof journeys)[number]; reasons: string[] }) => ({
+     ...toRow(x.journey),
+     reasons: x.reasons,
+diff --git a/src/components/builder/AIGenerateModal.tsx b/src/components/builder/AIGenerateModal.tsx
+index b4541724..44bbaae5 100644
+--- a/src/components/builder/AIGenerateModal.tsx
++++ b/src/components/builder/AIGenerateModal.tsx
+@@ -12,9 +12,16 @@ function wordCount(text: string): number {
+ export function AIGenerateModal({
+   onClose,
+   onGenerated,
++  variant = "modal",
+ }: {
+-  onClose: () => void;
++  onClose?: () => void;
+   onGenerated: (schema: SchemaSnapshot, stageConfidence: StageConfidence, sourceDescription: string) => void;
++  // "modal" (default) keeps the original popup-over-the-page behavior.
++  // "inline" renders the same form/generate/clarification logic as a plain
++  // block with no overlay, header, or close button — used to embed this as
++  // a step of the wizard (the dedicated "Draft with AI" flow) rather than a
++  // popup shown on top of the basics/stages steps.
++  variant?: "modal" | "inline";
+ }) {
+   const [description, setDescription] = useState("");
+   const [loading, setLoading] = useState(false);
+@@ -92,22 +99,8 @@ export function AIGenerateModal({
+     }
+   }
+ 
+-  return (
+-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+-      <div className="max-h-[85vh] w-full max-w-xl overflow-y-auto rounded-lg bg-white p-6 shadow-xl">
+-        <div className="mb-4 flex items-start justify-between">
+-          <div>
+-            <h2 className="text-lg font-semibold">Draft with AI</h2>
+-            <p className="mt-1 text-sm text-neutral-500">
+-              Paste a plain-text description of the product or process. AI drafts stages, fields,
+-              approvals, and required documents — every value stays flagged until you review it.
+-            </p>
+-          </div>
+-          <button onClick={onClose} className="text-neutral-400 hover:text-ink" aria-label="Close">
+-            ✕
+-          </button>
+-        </div>
+-
++  const body = (
++    <>
+         {clarification ? (
+           <div className="space-y-4">
+             <div className="rounded-md border border-amber-300 bg-amber-50 p-4">
+@@ -166,15 +159,40 @@ export function AIGenerateModal({
+             <ErrorList errors={errors} />
+ 
+             <div className="mt-4 flex justify-end gap-2">
+-              <Button type="button" variant="ghost" onClick={onClose}>
+-                Cancel
+-              </Button>
++              {onClose && (
++                <Button type="button" variant="ghost" onClick={onClose}>
++                  Cancel
++                </Button>
++              )}
+               <Button type="button" onClick={() => generate(description)} disabled={!wordsValid || loading}>
+                 {loading ? "Generating…" : "Generate draft"}
+               </Button>
+             </div>
+           </>
+         )}
++    </>
++  );
++
++  if (variant === "inline") {
++    return <div>{body}</div>;
++  }
++
++  return (
++    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
++      <div className="max-h-[85vh] w-full max-w-xl overflow-y-auto rounded-lg bg-white p-6 shadow-xl">
++        <div className="mb-4 flex items-start justify-between">
++          <div>
++            <h2 className="text-lg font-semibold">Draft with AI</h2>
++            <p className="mt-1 text-sm text-neutral-500">
++              Paste a plain-text description of the product or process. AI drafts stages, fields,
++              approvals, and required documents — every value stays flagged until you review it.
++            </p>
++          </div>
++          <button onClick={onClose} className="text-neutral-400 hover:text-ink" aria-label="Close">
++            ✕
++          </button>
++        </div>
++        {body}
+       </div>
+     </div>
+   );
+diff --git a/src/components/builder/BuilderWizard.tsx b/src/components/builder/BuilderWizard.tsx
+index d6eff8df..a2931afa 100644
+--- a/src/components/builder/BuilderWizard.tsx
++++ b/src/components/builder/BuilderWizard.tsx
+@@ -8,7 +8,11 @@ import { AIGenerateModal } from "./AIGenerateModal";
+ import { ClientStage, blankStage, lowestConfidence, markAsAi, newStageId, stripAiMarkers } from "./types";
+ import { validateSchemaSnapshot, type StageConfidence } from "@/lib/validation";
+ 
+-type Step = "basics" | "stages" | "review";
++// "ai-intake" is the dedicated Draft-with-AI entry: basic details + the
++// process description/document, in one step, before any stages exist. It's
++// only ever the *first* step of a session — once stages exist (generated or
++// manual), the flow is the same "stages" → "review" for everyone.
++type Step = "ai-intake" | "basics" | "stages" | "review";
+ 
+ export function BuilderWizard({
+   journeyId: initialJourneyId,
+@@ -24,17 +28,16 @@ export function BuilderWizard({
+   autoOpenAi?: boolean;
+ }) {
+   const router = useRouter();
+-  const [step, setStep] = useState<Step>(startStep ?? "basics");
++  // Defaulting from the autoOpenAi prop lets the dashboard's "Draft with AI"
++  // entry point (/journeys/new?ai=1) land straight on the dedicated intake
++  // step instead of making the person click the button again after arriving.
++  const [step, setStep] = useState<Step>(startStep ?? (autoOpenAi ? "ai-intake" : "basics"));
+   const [journeyId, setJourneyId] = useState<string | undefined>(initialJourneyId);
+   const [name, setName] = useState(initialBasics?.name ?? "");
+   const [description, setDescription] = useState(initialBasics?.description ?? "");
+   const [productType, setProductType] = useState(initialBasics?.productType ?? "");
+   const [stages, setStages] = useState<ClientStage[]>(initialStages ?? []);
+   const [reviewerRoles, setReviewerRoles] = useState<string>("");
+-  // Defaulting from the autoOpenAi prop lets the dashboard's "Draft with AI"
+-  // entry point (/journeys/new?ai=1) land straight in the modal instead of
+-  // making the person click the button again after arriving.
+-  const [aiModalOpen, setAiModalOpen] = useState(autoOpenAi ?? false);
+   const [aiSourceDescription, setAiSourceDescription] = useState<string | undefined>(undefined);
+   const [saving, setSaving] = useState(false);
+   const [errors, setErrors] = useState<string[]>([]);
+@@ -66,7 +69,6 @@ export function BuilderWizard({
+   function handleAiGenerated(schema: { stages: any[] }, stageConfidence: StageConfidence, sourceDescription: string) {
+     setStages(markAsAi(schema as any, stageConfidence));
+     setAiSourceDescription(sourceDescription);
+-    setAiModalOpen(false);
+     setStep("stages");
+   }
+ 
+@@ -142,22 +144,68 @@ export function BuilderWizard({
+ 
+   return (
+     <div>
+-      <div className="mb-6 flex gap-1 rounded-lg border border-neutral-200 bg-white p-1 text-sm">
+-        {(["basics", "stages", "review"] as Step[]).map((s) => (
+-          <button
+-            key={s}
+-            onClick={() => setStep(s)}
+-            className={`flex-1 rounded-md px-3 py-2 font-medium capitalize transition-colors ${
+-              step === s ? "bg-route-600 text-white" : "text-neutral-500 hover:bg-neutral-100"
+-            }`}
+-          >
+-            {s === "review" ? "Reviewers & submit" : s}
+-          </button>
+-        ))}
+-      </div>
++      {step !== "ai-intake" && (
++        <div className="mb-6 flex gap-1 rounded-lg border border-neutral-200 bg-white p-1 text-sm">
++          {(["basics", "stages", "review"] as Step[]).map((s) => (
++            <button
++              key={s}
++              onClick={() => setStep(s)}
++              className={`flex-1 rounded-md px-3 py-2 font-medium capitalize transition-colors ${
++                step === s ? "bg-route-600 text-white" : "text-neutral-500 hover:bg-neutral-100"
++              }`}
++            >
++              {s === "review" ? "Reviewers & submit" : s}
++            </button>
++          ))}
++        </div>
++      )}
+ 
+       <ErrorList errors={errors} />
+ 
++      {step === "ai-intake" && (
++        <Card className="space-y-5 p-6">
++          <div>
++            <h2 className="text-base font-semibold text-ink">Draft with AI</h2>
++            <p className="mt-1 text-sm text-neutral-500">
++              Start with the basics, then paste or upload a process description — AI drafts the stages, fields,
++              approvals, and required documents from it. You'll review and edit everything on the next step.
++            </p>
++          </div>
++          <div>
++            <Label>Journey name</Label>
++            <TextInput value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Mid-Market SaaS Onboarding" />
++          </div>
++          <div>
++            <Label>Description</Label>
++            <TextArea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What this journey is for, and who it's for." />
++          </div>
++          <div>
++            <Label>Product type</Label>
++            <TextInput value={productType} onChange={(e) => setProductType(e.target.value)} placeholder="e.g. SaaS Subscription" />
++          </div>
++
++          {basicsValid ? (
++            <div className="border-t border-neutral-200 pt-5">
++              <AIGenerateModal variant="inline" onGenerated={handleAiGenerated} />
++            </div>
++          ) : (
++            <p className="rounded-md border border-dashed border-neutral-300 bg-neutral-50 p-3 text-xs text-neutral-500">
++              Fill in the journey name and product type above to continue.
++            </p>
++          )}
++
++          <div>
++            <button
++              type="button"
++              onClick={() => setStep("basics")}
++              className="text-xs font-medium text-neutral-400 underline hover:text-ink"
++            >
++              Build manually instead
++            </button>
++          </div>
++        </Card>
++      )}
++
+       {step === "basics" && (
+         <Card className="space-y-4 p-6">
+           <div className="flex items-start justify-between gap-4 rounded-md border border-dashed border-route-300 bg-route-50/50 p-4">
+@@ -168,7 +216,7 @@ export function BuilderWizard({
+                 fill in the name and product type after.
+               </p>
+             </div>
+-            <Button type="button" variant="secondary" onClick={() => setAiModalOpen(true)} className="shrink-0">
++            <Button type="button" variant="secondary" onClick={() => setStep("ai-intake")} className="shrink-0">
+               ✦ Draft with AI
+             </Button>
+           </div>
+@@ -199,9 +247,6 @@ export function BuilderWizard({
+               {stages.length} stage{stages.length === 1 ? "" : "s"}
+             </p>
+             <div className="flex gap-2">
+-              <Button type="button" variant="secondary" onClick={() => setAiModalOpen(true)}>
+-                ✦ Draft with AI
+-              </Button>
+               <Button type="button" variant="secondary" onClick={addStage}>
+                 + Add stage
+               </Button>
+@@ -282,8 +327,6 @@ export function BuilderWizard({
+           </div>
+         </Card>
+       )}
+-
+-      {aiModalOpen && <AIGenerateModal onClose={() => setAiModalOpen(false)} onGenerated={handleAiGenerated} />}
+     </div>
+   );
+ }

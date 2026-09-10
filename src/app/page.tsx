@@ -15,6 +15,12 @@ export default async function DashboardPage() {
   const myName = await currentUserName();
   const myRole = await currentUserRole();
 
+  // Drafts are private to their creator — in_review/published/archived stay
+  // visible to everyone (reviewers need in_review; the rest is the org-wide
+  // record). Filtering here, before anything below reads `journeys`, keeps
+  // other people's drafts out of both the tab lists and Action needed.
+  const visibleJourneys = journeys.filter((j) => j.status !== "draft" || j.createdBy === myName);
+
   // Action needed = three distinct reasons, each surfaced with why:
   //   1. A pending review assigned to the profile type you logged in as
   //      (only computable if you gave one at login — see /login).
@@ -24,7 +30,7 @@ export default async function DashboardPage() {
   //      (approver_role) — see src/lib/deal-run.ts for the matching logic.
   // All three are real "this needs YOU specifically" states, as opposed to
   // "Live"/"Drafts" which show everything regardless of who it's waiting on.
-  const actionNeeded = journeys
+  const actionNeeded = visibleJourneys
     .map((j: (typeof journeys)[number]) => {
       const reasons: string[] = [];
 
@@ -95,7 +101,7 @@ export default async function DashboardPage() {
     pendingReviewCount: j.reviews.filter((r: (typeof j.reviews)[number]) => r.status === "pending").length,
   });
 
-  const rows = journeys.map(toRow);
+  const rows = visibleJourneys.map(toRow);
   const actionRows = actionNeeded.map((x: { journey: (typeof journeys)[number]; reasons: string[] }) => ({
     ...toRow(x.journey),
     reasons: x.reasons,

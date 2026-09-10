@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { BuilderWizard } from "@/components/builder/BuilderWizard";
+import { currentUserName } from "@/lib/current-user";
 import type { SchemaSnapshot } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +13,9 @@ export default async function EditJourneyPage({ params }: { params: Promise<{ id
     include: { currentVersion: true },
   });
   if (!journey) notFound();
+  // Drafts are private to their creator — nobody else should even be able
+  // to reach the editor for one via a direct URL.
+  if (journey.status === "draft" && journey.createdBy !== (await currentUserName())) notFound();
   if (journey.status === "published" || journey.status === "archived") {
     redirect(`/journeys/${journey.id}`);
   }

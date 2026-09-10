@@ -8,7 +8,11 @@ import { AIGenerateModal } from "./AIGenerateModal";
 import { ClientStage, blankStage, lowestConfidence, markAsAi, newStageId, stripAiMarkers } from "./types";
 import { validateSchemaSnapshot, type StageConfidence } from "@/lib/validation";
 
-type Step = "basics" | "stages" | "review";
+// "ai-intake" is the dedicated Draft-with-AI entry: basic details + the
+// process description/document, in one step, before any stages exist. It's
+// only ever the *first* step of a session — once stages exist (generated or
+// manual), the flow is the same "stages" → "review" for everyone.
+type Step = "ai-intake" | "basics" | "stages" | "review";
 
 export function BuilderWizard({
   journeyId: initialJourneyId,
@@ -24,17 +28,16 @@ export function BuilderWizard({
   autoOpenAi?: boolean;
 }) {
   const router = useRouter();
-  const [step, setStep] = useState<Step>(startStep ?? "basics");
+  // Defaulting from the autoOpenAi prop lets the dashboard's "Draft with AI"
+  // entry point (/journeys/new?ai=1) land straight on the dedicated intake
+  // step instead of making the person click the button again after arriving.
+  const [step, setStep] = useState<Step>(startStep ?? (autoOpenAi ? "ai-intake" : "basics"));
   const [journeyId, setJourneyId] = useState<string | undefined>(initialJourneyId);
   const [name, setName] = useState(initialBasics?.name ?? "");
   const [description, setDescription] = useState(initialBasics?.description ?? "");
   const [productType, setProductType] = useState(initialBasics?.productType ?? "");
   const [stages, setStages] = useState<ClientStage[]>(initialStages ?? []);
   const [reviewerRoles, setReviewerRoles] = useState<string>("");
-  // Defaulting from the autoOpenAi prop lets the dashboard's "Draft with AI"
-  // entry point (/journeys/new?ai=1) land straight in the modal instead of
-  // making the person click the button again after arriving.
-  const [aiModalOpen, setAiModalOpen] = useState(autoOpenAi ?? false);
   const [aiSourceDescription, setAiSourceDescription] = useState<string | undefined>(undefined);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
@@ -66,7 +69,6 @@ export function BuilderWizard({
   function handleAiGenerated(schema: { stages: any[] }, stageConfidence: StageConfidence, sourceDescription: string) {
     setStages(markAsAi(schema as any, stageConfidence));
     setAiSourceDescription(sourceDescription);
-    setAiModalOpen(false);
     setStep("stages");
   }
 
@@ -142,21 +144,67 @@ export function BuilderWizard({
 
   return (
     <div>
-      <div className="mb-6 flex gap-1 rounded-lg border border-neutral-200 bg-white p-1 text-sm">
-        {(["basics", "stages", "review"] as Step[]).map((s) => (
-          <button
-            key={s}
-            onClick={() => setStep(s)}
-            className={`flex-1 rounded-md px-3 py-2 font-medium capitalize transition-colors ${
-              step === s ? "bg-route-600 text-white" : "text-neutral-500 hover:bg-neutral-100"
-            }`}
-          >
-            {s === "review" ? "Reviewers & submit" : s}
-          </button>
-        ))}
-      </div>
+      {step !== "ai-intake" && (
+        <div className="mb-6 flex gap-1 rounded-lg border border-neutral-200 bg-white p-1 text-sm">
+          {(["basics", "stages", "review"] as Step[]).map((s) => (
+            <button
+              key={s}
+              onClick={() => setStep(s)}
+              className={`flex-1 rounded-md px-3 py-2 font-medium capitalize transition-colors ${
+                step === s ? "bg-route-600 text-white" : "text-neutral-500 hover:bg-neutral-100"
+              }`}
+            >
+              {s === "review" ? "Reviewers & submit" : s}
+            </button>
+          ))}
+        </div>
+      )}
 
       <ErrorList errors={errors} />
+
+      {step === "ai-intake" && (
+        <Card className="space-y-5 p-6">
+          <div>
+            <h2 className="text-base font-semibold text-ink">Draft with AI</h2>
+            <p className="mt-1 text-sm text-neutral-500">
+              Start with the basics, then paste or upload a process description — AI drafts the stages, fields,
+              approvals, and required documents from it. You'll review and edit everything on the next step.
+            </p>
+          </div>
+          <div>
+            <Label>Journey name</Label>
+            <TextInput value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Mid-Market SaaS Onboarding" />
+          </div>
+          <div>
+            <Label>Description</Label>
+            <TextArea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What this journey is for, and who it's for." />
+          </div>
+          <div>
+            <Label>Product type</Label>
+            <TextInput value={productType} onChange={(e) => setProductType(e.target.value)} placeholder="e.g. SaaS Subscription" />
+          </div>
+
+          {basicsValid ? (
+            <div className="border-t border-neutral-200 pt-5">
+              <AIGenerateModal variant="inline" onGenerated={handleAiGenerated} />
+            </div>
+          ) : (
+            <p className="rounded-md border border-dashed border-neutral-300 bg-neutral-50 p-3 text-xs text-neutral-500">
+              Fill in the journey name and product type above to continue.
+            </p>
+          )}
+
+          <div>
+            <button
+              type="button"
+              onClick={() => setStep("basics")}
+              className="text-xs font-medium text-neutral-400 underline hover:text-ink"
+            >
+              Build manually instead
+            </button>
+          </div>
+        </Card>
+      )}
 
       {step === "basics" && (
         <Card className="space-y-4 p-6">
@@ -168,7 +216,7 @@ export function BuilderWizard({
                 fill in the name and product type after.
               </p>
             </div>
-            <Button type="button" variant="secondary" onClick={() => setAiModalOpen(true)} className="shrink-0">
+            <Button type="button" variant="secondary" onClick={() => setStep("ai-intake")} className="shrink-0">
               ✦ Draft with AI
             </Button>
           </div>
@@ -199,9 +247,6 @@ export function BuilderWizard({
               {stages.length} stage{stages.length === 1 ? "" : "s"}
             </p>
             <div className="flex gap-2">
-              <Button type="button" variant="secondary" onClick={() => setAiModalOpen(true)}>
-                ✦ Draft with AI
-              </Button>
               <Button type="button" variant="secondary" onClick={addStage}>
                 + Add stage
               </Button>
@@ -282,8 +327,6 @@ export function BuilderWizard({
           </div>
         </Card>
       )}
-
-      {aiModalOpen && <AIGenerateModal onClose={() => setAiModalOpen(false)} onGenerated={handleAiGenerated} />}
     </div>
   );
 }
