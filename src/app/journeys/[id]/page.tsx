@@ -4,7 +4,8 @@ import { prisma } from "@/lib/db";
 import { StatusBadge, Card } from "@/components/ui";
 import { PublishButton, ArchiveButton } from "@/components/JourneyActions";
 import { StartDealForm } from "@/components/deals/StartDealForm";
-import { currentUserName } from "@/lib/current-user";
+import { currentUserName, currentUserRole } from "@/lib/current-user";
+import { canViewJourney } from "@/lib/journey-access";
 
 export const dynamic = "force-dynamic";
 
@@ -21,10 +22,13 @@ export default async function JourneyDetailPage({ params }: { params: Promise<{ 
   });
   if (!journey) notFound();
 
-  const isOwner = journey.createdBy === await currentUserName();
-  // Drafts are private to their creator. Treat it as not-found for anyone
-  // else rather than a 403, so a draft's existence isn't revealed either.
-  if (journey.status === "draft" && !isOwner) notFound();
+  const myName = await currentUserName();
+  const isOwner = journey.createdBy === myName;
+  // Drafts and in_review journeys are private to their creator (and, for
+  // in_review, whoever is actually assigned to review it). Treat it as
+  // not-found for anyone else rather than a 403, so its existence isn't
+  // revealed either.
+  if (!canViewJourney(journey, journey.reviews, myName, await currentUserRole())) notFound();
   const pending = journey.reviews.filter((r: (typeof journey.reviews)[number]) => r.status === "pending");
   const canEdit = journey.status === "draft" || journey.status === "in_review";
   const canPreview = !!journey.currentVersionId;

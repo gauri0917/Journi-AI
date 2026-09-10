@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { currentUserName } from "@/lib/current-user";
+import { currentUserName, currentUserRole } from "@/lib/current-user";
+import { canViewJourney } from "@/lib/journey-access";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -16,9 +17,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     if (!journey) {
       return NextResponse.json({ error: "not found" }, { status: 404 });
     }
-    // Drafts are private to their creator — respond as not-found for anyone
-    // else so the API doesn't leak drafts that the pages already hide.
-    if (journey.status === "draft" && journey.createdBy !== (await currentUserName())) {
+    // Drafts and in_review are private to their creator (and, for
+    // in_review, whoever is assigned to review it) — respond as not-found
+    // for anyone else so the API doesn't leak what the pages already hide.
+    const me = await currentUserName();
+    if (!canViewJourney(journey, journey.reviews, me, await currentUserRole())) {
       return NextResponse.json({ error: "not found" }, { status: 404 });
     }
     return NextResponse.json({ journey });

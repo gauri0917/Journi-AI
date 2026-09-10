@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { JourneysTabs } from "@/components/JourneysTabs";
 import { currentUserName, currentUserRole } from "@/lib/current-user";
 import { roleMatches, stageRequiresApproval } from "@/lib/deal-run";
+import { canViewJourney } from "@/lib/journey-access";
 import type { SchemaSnapshot } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -15,11 +16,12 @@ export default async function DashboardPage() {
   const myName = await currentUserName();
   const myRole = await currentUserRole();
 
-  // Drafts are private to their creator — in_review/published/archived stay
-  // visible to everyone (reviewers need in_review; the rest is the org-wide
-  // record). Filtering here, before anything below reads `journeys`, keeps
-  // other people's drafts out of both the tab lists and Action needed.
-  const visibleJourneys = journeys.filter((j) => j.status !== "draft" || j.createdBy === myName);
+  // Drafts and in_review journeys are private to their creator (and, for
+  // in_review, to whoever is actually assigned to review it) — published
+  // and archived stay visible to everyone as the org-wide record. Filtering
+  // here, before anything below reads `journeys`, keeps other people's
+  // drafts/reviews out of both the tab lists and Action needed.
+  const visibleJourneys = journeys.filter((j) => canViewJourney(j, j.reviews, myName, myRole));
 
   // Action needed = three distinct reasons, each surfaced with why:
   //   1. A pending review assigned to the profile type you logged in as

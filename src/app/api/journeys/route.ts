@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { currentUserName } from "@/lib/current-user";
+import { currentUserName, currentUserRole } from "@/lib/current-user";
+import { canViewJourney } from "@/lib/journey-access";
 
 export async function GET() {
   try {
@@ -8,11 +9,12 @@ export async function GET() {
       orderBy: { updatedAt: "desc" },
       include: { currentVersion: true, reviews: true },
     });
-    // Drafts are only visible to the profile that created them — in_review,
-    // published, and archived stay visible to everyone (reviewers need to
-    // see in_review; published/archived are the org-wide record).
+    // Drafts and in_review are only visible to their creator (and, for
+    // in_review, whoever is actually assigned to review it) — published and
+    // archived stay visible to everyone as the org-wide record.
     const me = await currentUserName();
-    const visible = journeys.filter((j) => j.status !== "draft" || j.createdBy === me);
+    const myRole = await currentUserRole();
+    const visible = journeys.filter((j) => canViewJourney(j, j.reviews, me, myRole));
     return NextResponse.json({ journeys: visible });
   } catch (err) {
     console.error("GET /api/journeys failed:", err);
